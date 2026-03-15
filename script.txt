@@ -1,0 +1,321 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Camera = workspace.CurrentCamera
+
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+
+-- Rayfield Library Load
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+-- Script Settings
+local Settings = {
+    AutoAim = false,
+    ESP = false,
+    AimSmoothness = 0.5,
+    AimDistance = 500,
+    AimVisibleOnly = true,
+    ESPColor = Color3.fromRGB(0, 255, 0),
+    ShowESPDistance = true,
+    ShowESPHealth = true
+}
+
+-- ESP Objects Storage
+local ESPObjects = {}
+
+-- =====================================================
+-- AUTO-AIM FUNCTIONS
+-- =====================================================
+
+local function GetClosestPlayer()
+    local ClosestPlayer = nil
+    local ClosestDistance = Settings.AimDistance
+    
+    for _, Player in pairs(Players:GetPlayers()) do
+        if Player ~= LocalPlayer and Player.Character then
+            local Character = Player.Character
+            local Humanoid = Character:FindFirstChild("Humanoid")
+            local Head = Character:FindFirstChild("Head")
+            
+            if Humanoid and Head and Humanoid.Health > 0 then
+                -- Check if visible
+                if Settings.AimVisibleOnly then
+                    local Ray = workspace:FindPartOnRay(Ray.new(Camera.CFrame.Position, (Head.Position - Camera.CFrame.Position).Unit * 1000))
+                    if Ray and Ray:IsDescendantOf(Character) then
+                        local Distance = (Head.Position - Camera.CFrame.Position).Magnitude
+                        if Distance < ClosestDistance then
+                            ClosestDistance = Distance
+                            ClosestPlayer = Player
+                        end
+                    end
+                else
+                    local Distance = (Head.Position - Camera.CFrame.Position).Magnitude
+                    if Distance < ClosestDistance then
+                        ClosestDistance = Distance
+                        ClosestPlayer = Player
+                    end
+                end
+            end
+        end
+    end
+    
+    return ClosestPlayer
+end
+
+local function AimAtPlayer(Player)
+    if not Player or not Player.Character then return end
+    
+    local Head = Player.Character:FindFirstChild("Head")
+    if not Head then return end
+    
+    -- Smooth aiming
+    local TargetCFrame = CFrame.new(Camera.CFrame.Position, Head.Position)
+    Camera.CFrame = Camera.CFrame:Lerp(TargetCFrame, Settings.AimSmoothness)
+end
+
+-- =====================================================
+-- ESP FUNCTIONS
+-- =====================================================
+
+local function CreateESP(Player)
+    if not Player.Character then return end
+    
+    local Character = Player.Character
+    local Head = Character:FindFirstChild("Head")
+    
+    if not Head or ESPObjects[Player] then return end
+    
+    -- Create Billboard GUI
+    local BillboardGui = Instance.new("BillboardGui")
+    BillboardGui.Size = UDim2.new(0, 100, 0, 50)
+    BillboardGui.MaxDistance = Settings.AimDistance
+    BillboardGui.Parent = Head
+    
+    -- Text Label
+    local TextLabel = Instance.new("TextLabel")
+    TextLabel.Name = "NameLabel"
+    TextLabel.Size = UDim2.new(1, 0, 1, 0)
+    TextLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    TextLabel.BackgroundTransparency = 0.3
+    TextLabel.TextColor3 = Settings.ESPColor
+    TextLabel.TextSize = 14
+    TextLabel.Font = Enum.Font.GothamBold
+    TextLabel.Parent = BillboardGui
+    
+    -- Update function
+    local UpdateESP = function()
+        if Player.Character and Head.Parent then
+            local Distance = (Head.Position - Camera.CFrame.Position).Magnitude
+            local HealthPercent = (Player.Character:FindFirstChild("Humanoid").Health / Player.Character:FindFirstChild("Humanoid").MaxHealth) * 100
+            
+            local Text = Player.Name
+            
+            if Settings.ShowESPDistance then
+                Text = Text .. "\n" .. math.floor(Distance) .. "m"
+            end
+            
+            if Settings.ShowESPHealth then
+                Text = Text .. "\n" .. math.floor(HealthPercent) .. "%"
+            end
+            
+            TextLabel.Text = Text
+        end
+    end
+    
+    ESPObjects[Player] = {
+        BillboardGui = BillboardGui,
+        Update = UpdateESP
+    }
+end
+
+local function RemoveESP(Player)
+    if ESPObjects[Player] then
+        if ESPObjects[Player].BillboardGui then
+            ESPObjects[Player].BillboardGui:Destroy()
+        end
+        ESPObjects[Player] = nil
+    end
+end
+
+local function UpdateAllESP()
+    for _, Player in pairs(Players:GetPlayers()) do
+        if Player ~= LocalPlayer then
+            if Settings.ESP and Player.Character then
+                if not ESPObjects[Player] then
+                    CreateESP(Player)
+                end
+                if ESPObjects[Player] then
+                    ESPObjects[Player].Update()
+                end
+            else
+                RemoveESP(Player)
+            end
+        end
+    end
+end
+
+-- =====================================================
+-- RAYFIELD UI
+-- =====================================================
+
+local Window = Rayfield:CreateWindow({
+    Name = "🎮 FPS Script UI",
+    Icon = 0,
+    LoadingTitle = "جاري التحميل...",
+    LoadingSubtitle = "انتظر قليلاً",
+    Theme = "Dark",
+    DisableRayfieldPrompts = false,
+    DisableMoveDetection = false,
+    HidePremiumNotification = false,
+    ShowStyle = true
+})
+
+-- =====================================================
+-- Auto-Aim Tab
+-- =====================================================
+local AutoAimTab = Window:CreateTab("⚙️ التصويب التلقائي", 0)
+
+AutoAimTab:CreateToggle({
+    Name = "تفعيل Auto-Aim",
+    CurrentValue = false,
+    Flag = "AutoAimToggle",
+    Callback = function(Value)
+        Settings.AutoAim = Value
+    end
+})
+
+AutoAimTab:CreateSlider({
+    Name = "سلاسة التصويب",
+    Min = 0.1,
+    Max = 1,
+    Increment = 0.1,
+    Suffix = "",
+    CurrentValue = Settings.AimSmoothness,
+    Flag = "AimSmoothnessSlider",
+    Callback = function(Value)
+        Settings.AimSmoothness = Value
+    end
+})
+
+AutoAimTab:CreateSlider({
+    Name = "مسافة التصويب",
+    Min = 50,
+    Max = 1000,
+    Increment = 50,
+    Suffix = " وحدة",
+    CurrentValue = Settings.AimDistance,
+    Flag = "AimDistanceSlider",
+    Callback = function(Value)
+        Settings.AimDistance = Value
+    end
+})
+
+AutoAimTab:CreateToggle({
+    Name = "استهداف الأعداء المرئيين فقط",
+    CurrentValue = true,
+    Flag = "AimVisibleToggle",
+    Callback = function(Value)
+        Settings.AimVisibleOnly = Value
+    end
+})
+
+-- =====================================================
+-- ESP Tab
+-- =====================================================
+local ESPTab = Window:CreateTab("👁️ ESP", 0)
+
+ESPTab:CreateToggle({
+    Name = "تفعيل ESP",
+    CurrentValue = false,
+    Flag = "ESPToggle",
+    Callback = function(Value)
+        Settings.ESP = Value
+        if not Value then
+            for _, Player in pairs(Players:GetPlayers()) do
+                RemoveESP(Player)
+            end
+        end
+    end
+})
+
+ESPTab:CreateToggle({
+    Name = "عرض المسافة",
+    CurrentValue = true,
+    Flag = "ShowDistanceToggle",
+    Callback = function(Value)
+        Settings.ShowESPDistance = Value
+    end
+})
+
+ESPTab:CreateToggle({
+    Name = "عرض الصحة",
+    CurrentValue = true,
+    Flag = "ShowHealthToggle",
+    Callback = function(Value)
+        Settings.ShowESPHealth = Value
+    end
+})
+
+ESPTab:CreateSlider({
+    Name = "مسافة عرض ESP",
+    Min = 50,
+    Max = 1000,
+    Increment = 50,
+    Suffix = " وحدة",
+    CurrentValue = Settings.AimDistance,
+    Flag = "ESPDistanceSlider",
+    Callback = function(Value)
+        Settings.AimDistance = Value
+    end
+})
+
+-- =====================================================
+-- Info Tab
+-- =====================================================
+local InfoTab = Window:CreateTab("ℹ️ معلومات", 0)
+
+InfoTab:CreateParagraph({
+    Title = "حول البرنامج",
+    Content = "FPS Script مع Auto-aim و ESP\nنسخة 1.0\n\n✅ التصويب التلقائي\n✅ عرض اللاعبين\n✅ واجهة استخدام عصرية"
+})
+
+-- =====================================================
+-- MAIN LOOP
+-- =====================================================
+
+RunService.RenderStepped:Connect(function()
+    if Settings.AutoAim then
+        local ClosestPlayer = GetClosestPlayer()
+        if ClosestPlayer then
+            AimAtPlayer(ClosestPlayer)
+        end
+    end
+    
+    if Settings.ESP then
+        UpdateAllESP()
+    end
+end)
+
+-- Handle player joining
+Players.PlayerAdded:Connect(function(Player)
+    if Settings.ESP and Player ~= LocalPlayer then
+        task.wait(0.5)
+        CreateESP(Player)
+    end
+end)
+
+-- Handle player leaving
+Players.PlayerRemoving:Connect(function(Player)
+    RemoveESP(Player)
+end)
+
+-- Handle character respawn
+LocalPlayer.CharacterAdded:Connect(function()
+    for _, Player in pairs(Players:GetPlayers()) do
+        RemoveESP(Player)
+    end
+end)
+
+print("✅ FPS Script Loaded Successfully!")
+print("💡 استخدم واجهة Rayfield للتحكم في الإعدادات")
